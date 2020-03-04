@@ -1,0 +1,14 @@
+[requires]
+sfml/2.5.1@bincrafters/stable
+imgui-sfml/2.1@bincrafters/stable
+
+[generators]
+cmake
+
+[options]
+sfml:shared=True
+sfml:window=True
+sfml:graphics=True
+sfml:network=True
+sfml:audio=True
+imgui-sfml:shared=True
