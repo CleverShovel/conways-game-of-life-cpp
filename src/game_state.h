@@ -11,7 +11,7 @@ public:
 
 private:
     int rowCount_, colCount_;
-    StateMatrix state_;
+    StateMatrix state_, temp_;
 
     int CountAliveNeighbours(int x, int y) const;
 
