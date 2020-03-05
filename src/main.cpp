@@ -84,8 +84,9 @@ int main()
 
     window.setTitle(windowTitle);
     sf::Clock deltaClock;
+    sf::Clock fpsClock;
     while (window.isOpen()) {
-        float fps = 1.f / deltaClock.restart().asSeconds();
+        float fps = 1.f / fpsClock.restart().asSeconds();
 
         sf::Event event;
         while (window.pollEvent(event)) {
