@@ -10,11 +10,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <future>
 #include <utility>
 #include <vector>
 
-#include <algorithm>
 #include <random>
+
+#include <iostream>
+#include <iterator>
 
 using sf::RectangleShape;
 using sf::Vector2f;
@@ -37,15 +41,16 @@ GameState::StateMatrix GetRandomMatrix(int rowCount, int colCount)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
     // размер окна
     sf::RenderWindow window(sf::VideoMode(640, 700), "");
 
     // window.setFramerateLimit(60);
-    window.setVerticalSyncEnabled(true);
+    // window.setVerticalSyncEnabled(true);
     ImGui::SFML::Init(window);
 
     char windowTitle[255] = "ImGui + SFML = <3";
-    
 
     auto bgColor = sf::Color::White;
     auto zoneColor = sf::Color::Black;
@@ -80,13 +85,47 @@ int main()
     GameState gameState(GetRandomMatrix(cellRowCount, cellColCount));
     // GameState gameState(cellColCount, cellRowCount);
 
-    vector<RectangleShape> cells;
+    auto lam = [cc = cellColCount,
+                   cr = cellRowCount,
+                   cw = cellWidth,
+                   ch = cellHeight,
+                   zp = zonePos,
+                   acolor = aliveCellColor,
+                   &gameState](size_t from, size_t to) {
+        // sf::Clock asyncClock;
+        vector<RectangleShape> cells;
+        auto& state = gameState.GetState();
+        for (int i = from; i < to; i++) {
+            for (int j = 0; j < cr; j++) {
+                if (state[j][i] == CellState::Dead)
+                    continue;
+                cells.emplace_back(Vector2f(cw, ch));
+                cells.back().setPosition(Vector2f(
+                    i * cw + zp.x,
+                    j * ch + zp.y));
+                cells.back().setFillColor(acolor);
+            }
+        }
+        // std::cout << "async       " << asyncClock.getElapsedTime().asMicroseconds() << '\n';
+        return cells;
+    };
+
+    vector<std::future<vector<RectangleShape>>> futures;
 
     window.setTitle(windowTitle);
+
     sf::Clock deltaClock;
     sf::Clock fpsClock;
+    // sf::Clock profileClock;
+
+    const int threadCount = 4;
+
+    int max_fps = -1;
+
     while (window.isOpen()) {
-        float fps = 1.f / fpsClock.restart().asSeconds();
+        int fps = int(1.f / fpsClock.restart().asSeconds());
+        if (max_fps == -1) max_fps = 0;
+        else max_fps = std::max(fps, max_fps);
 
         sf::Event event;
         while (window.pollEvent(event)) {
@@ -98,6 +137,17 @@ int main()
         }
 
         gameState.NextState();
+
+        size_t part = cellRowCount / threadCount + (cellRowCount % threadCount > 0 ? 1 : 0);
+        for (int i = 0; i < threadCount - 1; i++) {
+            size_t from = part * i;
+            size_t to = from + std::min(cellRowCount - from, part);
+            futures.push_back(std::async(
+                std::launch::async, lam, from, to));
+        }
+
+        vector<vector<RectangleShape>> cells;
+        cells.push_back(lam((threadCount - 1)*part, cellRowCount));
 
         ImGui::SFML::Update(window, deltaClock.restart());
 
@@ -111,50 +161,36 @@ int main()
 
         ImGui::SetNextWindowPos(ImVec2(zonePos.x, zonePos.y));
         ImGui::Begin("FPS");
-        ImGui::Text("%d", int(fps));
+        ImGui::Text("current: %d", fps);
+        ImGui::Text("max:     %d", max_fps);
         ImGui::End();
-
-        auto& state = gameState.GetState();
-        for (int i = 0; i < cellColCount; i++) {
-            for (int j = 0; j < cellRowCount; j++) {
-                if (state[j][i] == CellState::Dead) continue;
-                cells.emplace_back(Vector2f(cellWidth, cellHeight));
-                cells.back().setPosition(Vector2f(
-                    i * cellWidth + zonePos.x,
-                    j * cellHeight + zonePos.y));
-                cells.back().setFillColor(aliveCellColor);
-            }
-        }
-
-        // vector<array<sf::Vertex, 2>> lines;
-        // for (int i = 1; i < cellColCount; i++) {
-        //     lines.push_back({ Vector2f(i * cellWidth + zonePos.x, zonePos.y),
-        //         Vector2f(i * cellWidth + zonePos.x, zonePos.y + zoneHeight) });
-        //     lines.back()[0].color = zoneColor;
-        //     lines.back()[1].color = zoneColor;
-        // }
-
-        // for (int i = 1; i < cellRowCount; i++) {
-        //     lines.push_back({ Vector2f(zonePos.x, i * cellHeight + zonePos.y),
-        //         Vector2f(zonePos.x + zoneWidth, i * cellHeight + zonePos.y) });
-        //     lines.back()[0].color = zoneColor;
-        //     lines.back()[1].color = zoneColor;
-        // }
 
         window.clear(bgColor); // fill background with color
 
         window.draw(zone);
 
-        for (const auto& cell : cells)
-            window.draw(cell);
+        // long long beforeWait = profileClock.getElapsedTime().asMicroseconds();
 
-        // for (const auto& line : lines)
-        //     window.draw(line.data(), 2, sf::Lines);
+        for (auto& f : futures) {
+            cells.push_back(f.get());
+        }
+
+        // long long wait = profileClock.getElapsedTime().asMicroseconds() - beforeWait;
+
+        for (const auto& v : cells)
+            for (const auto& cell : v)
+                window.draw(cell);
+
+        // long long drawCells = profileClock.getElapsedTime().asMicroseconds() - beforeWait - wait;
 
         ImGui::SFML::Render(window);
         window.display();
 
-        cells.clear();
+        futures.clear();
+        // std::cout << "before wait " << beforeWait << '\n';
+        // std::cout << "wait        " << wait << '\n';
+        // std::cout << "draw cells  " << drawCells << '\n';
+        // std::cout << "main all    " << profileClock.restart().asMicroseconds() << "\n\n";
     }
 
     ImGui::SFML::Shutdown();
