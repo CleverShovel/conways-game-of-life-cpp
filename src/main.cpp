@@ -8,37 +8,18 @@
 #include <SFML/System/Clock.hpp>
 #include <SFML/Window/Event.hpp>
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <future>
 #include <utility>
 #include <vector>
 
-#include <random>
-
-#include <iostream>
-
 using sf::RectangleShape;
 using sf::Vector2f;
 using std::array;
 using std::vector;
 
-GameState::StateMatrix GetRandomMatrix(int rowCount, int colCount)
-{
-    std::random_device r;
-    std::default_random_engine e(r());
-    std::uniform_int_distribution<int> uniform_dist(0, 1);
-
-    auto matrix = GameState::StateMatrix(rowCount, vector(colCount, CellState::Dead));
-    for (auto& v : matrix)
-        std::generate(v.begin(), v.end(), [&]() {
-            return static_cast<CellState>(uniform_dist(e));
-        });
-    return matrix;
-}
-
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     int max_generation = (argc > 1 ? atoi(argv[1]) : -1);
     // размер окна
@@ -78,11 +59,7 @@ int main(int argc, char *argv[])
     zone.setOutlineThickness(zoneThickness);
     zone.setFillColor(deadCellColor);
 
-    bool active = false;
-    long long generation = 0;
-
-    GameState gameState(GetRandomMatrix(cellRowCount, cellColCount));
-    // GameState gameState(cellColCount, cellRowCount);
+    GameState gameState(cellColCount, cellRowCount);
 
     auto lam = [cc = cellColCount,
                    cr = cellRowCount,
@@ -92,7 +69,7 @@ int main(int argc, char *argv[])
                    acolor = aliveCellColor,
                    &gameState](int from, int to) {
         sf::VertexArray cells(sf::Triangles); // sf::TriangleStrip);
-        
+
         auto& state = gameState.GetState();
         for (int i = from; i < to; i++) {
             for (int j = 0; j < cr; j++) {
@@ -122,7 +99,6 @@ int main(int argc, char *argv[])
     int maxFPS = -1;
 
     while (window.isOpen()) {
-        generation++;
         int fps = int(1.f / fpsClock.restart().asSeconds());
         if (maxFPS != -1)
             maxFPS = std::max(fps, maxFPS);
@@ -138,7 +114,8 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (generation == max_generation) window.close();
+        if (gameState.GetGeneration() == max_generation)
+            window.close();
 
         gameState.NextState();
 
@@ -157,9 +134,11 @@ int main(int argc, char *argv[])
         ImGui::SetNextWindowPos(ImVec2(zonePos.x, zoneHeight + zonePos.y + 5.f), ImGuiCond_Once);
         ImGui::Begin("State");
         if (ImGui::Button("Start"))
-            active = true;
+            gameState.Unpause();
         if (ImGui::Button("Pause"))
-            active = false;
+            gameState.Pause();
+        if (ImGui::Button("Restart"))
+            gameState.Restart();
         ImGui::End();
 
         ImGui::SetNextWindowPos(ImVec2(zonePos.x, zonePos.y), ImGuiCond_Once);
@@ -169,7 +148,7 @@ int main(int argc, char *argv[])
         ImGui::End();
 
         ImGui::Begin("Population");
-        ImGui::Text("Generation: %lld", generation);
+        ImGui::Text("Generation: %lld", gameState.GetGeneration());
         ImGui::End();
 
         window.clear(bgColor);
