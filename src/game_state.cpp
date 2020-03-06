@@ -2,6 +2,9 @@
 
 #include <array>
 #include <utility>
+#include <future>
+
+#include <iostream>
 
 using std::array;
 using std::vector;
@@ -29,7 +32,7 @@ int GameState::CountAliveNeighbours(int x, int y) const
 
     int count = 0;
 
-    for (int i = 0; i < dx.size() && count < 4; i++) {
+    for (size_t i = 0; i < dx.size(); i++) {
         int new_x = x + dx[i];
         int new_y = y + dy[i];
         count += (new_x >= 0 && new_x < colCount_ && new_y >= 0 && new_y < rowCount_
@@ -39,15 +42,22 @@ int GameState::CountAliveNeighbours(int x, int y) const
     return count;
 }
 
-void GameState::NextState()
-{
-    for (int i = 0; i < rowCount_; i++) {
+void GameState::NextStateSeq(int begin, int end) {
+    for (int i = begin; i < end; i++) {
         for (int j = 0; j < colCount_; j++) {
             int count = CountAliveNeighbours(j, i);
             temp_[i][j] = static_cast<CellState>(
                 count == 3 || count == 2 && state_[i][j] == CellState::Alive);
         }
-    }
+    } 
+}
+
+void GameState::NextState()
+{
+    auto f = std::async(std::launch::async, &GameState::NextStateSeq, this, 0, colCount_/2);
+    NextStateSeq(colCount_/2, colCount_);
+    f.get();
+
     state_.swap(temp_);
 }
 

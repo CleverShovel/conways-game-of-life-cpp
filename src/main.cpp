@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
                    ch = cellHeight,
                    zp = zonePos,
                    acolor = aliveCellColor,
-                   &gameState](size_t from, size_t to) {
+                   &gameState](int from, int to) {
         sf::VertexArray cells(sf::Triangles); // sf::TriangleStrip);
         
         auto& state = gameState.GetState();
@@ -110,7 +110,6 @@ int main(int argc, char *argv[])
     };
 
     vector<std::future<sf::VertexArray>> futures;
-    // vector<vector<RectangleShape>> cells;
     vector<sf::VertexArray> cells;
 
     window.setTitle(windowTitle);
@@ -120,15 +119,15 @@ int main(int argc, char *argv[])
 
     const int threadCount = 4;
 
-    int max_fps = -1;
+    int maxFPS = -1;
 
     while (window.isOpen()) {
         generation++;
         int fps = int(1.f / fpsClock.restart().asSeconds());
-        if (max_fps == -1)
-            max_fps = 0;
+        if (maxFPS != -1)
+            maxFPS = std::max(fps, maxFPS);
         else
-            max_fps = std::max(fps, max_fps);
+            maxFPS = 0;
 
         sf::Event event;
         while (window.pollEvent(event)) {
@@ -166,14 +165,14 @@ int main(int argc, char *argv[])
         ImGui::SetNextWindowPos(ImVec2(zonePos.x, zonePos.y), ImGuiCond_Once);
         ImGui::Begin("FPS");
         ImGui::Text("current: %d", fps);
-        ImGui::Text("max:     %d", max_fps);
+        ImGui::Text("max:     %d", maxFPS);
         ImGui::End();
 
         ImGui::Begin("Population");
         ImGui::Text("Generation: %lld", generation);
         ImGui::End();
 
-        window.clear(bgColor); // fill background with color
+        window.clear(bgColor);
 
         window.draw(zone);
 

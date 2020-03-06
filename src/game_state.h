@@ -19,5 +19,6 @@ public:
     GameState(int rowCount, int colCount);
     GameState(StateMatrix state);
     void NextState();
+    void NextStateSeq(int begin, int end);
     const StateMatrix& GetState() const;
 };
