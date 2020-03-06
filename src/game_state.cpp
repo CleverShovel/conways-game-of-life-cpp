@@ -9,7 +9,7 @@ using std::vector;
 GameState::GameState(int rowCount, int colCount)
     : rowCount_(rowCount)
     , colCount_(colCount)
-    , state_(rowCount, vector(colCount, CellState::Dead))
+    , state_(rowCount_, vector(colCount_, CellState::Dead))
     , temp_(state_)
 {
 }
