@@ -14,14 +14,18 @@
 #include <utility>
 #include <vector>
 
-using sf::RectangleShape;
+// #include <iostream>
+
 using sf::Vector2f;
+using sf::Vertex;
 using std::array;
 using std::vector;
 
 int main(int argc, char* argv[])
 {
     int max_generation = (argc > 1 ? atoi(argv[1]) : -1);
+    const int threadCount = std::max(2, int(std::thread::hardware_concurrency()));
+
     // размер окна
     sf::RenderWindow window(sf::VideoMode(640, 700), "");
 
@@ -53,13 +57,13 @@ int main(int argc, char* argv[])
         zoneWidth / cellColCount, zoneHeight / cellRowCount
     };
 
-    RectangleShape zone(sf::Vector2f(zoneWidth, zoneHeight));
+    sf::RectangleShape zone(sf::Vector2f(zoneWidth, zoneHeight));
     zone.setOutlineColor(zoneColor);
     zone.setPosition(zonePos);
     zone.setOutlineThickness(zoneThickness);
     zone.setFillColor(deadCellColor);
 
-    GameState gameState(cellColCount, cellRowCount);
+    GameState gameState(cellColCount, cellRowCount, threadCount);
 
     auto lam = [cc = cellColCount,
                    cr = cellRowCount,
@@ -68,19 +72,19 @@ int main(int argc, char* argv[])
                    zp = zonePos,
                    acolor = aliveCellColor,
                    &gameState](int from, int to) {
-        sf::VertexArray cells(sf::Triangles); // sf::TriangleStrip);
+        sf::VertexArray cells(sf::Triangles);
 
         auto& state = gameState.GetState();
         for (int i = from; i < to; i++) {
-            for (int j = 0; j < cr; j++) {
-                if (state[j][i] == CellState::Dead)
+            for (int j = 0; j < cc; j++) {
+                if (state[i][j] == CellState::Dead)
                     continue;
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x, j * ch + zp.y), acolor));
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x, j * ch + zp.y + ch), acolor));
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x + cw, j * ch + zp.y + ch), acolor));
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x, j * ch + zp.y + ch), acolor));
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x + cw, j * ch + zp.y + ch), acolor));
-                cells.append(sf::Vertex(sf::Vector2f(i * cw + zp.x + cw, j * ch + zp.y), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
+                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y), acolor));
             }
         }
         return cells;
@@ -93,8 +97,6 @@ int main(int argc, char* argv[])
 
     sf::Clock deltaClock;
     sf::Clock fpsClock;
-
-    const int threadCount = 4;
 
     int maxFPS = -1;
 
@@ -119,26 +121,39 @@ int main(int argc, char* argv[])
 
         gameState.NextState();
 
-        size_t part = cellRowCount / threadCount + (cellRowCount % threadCount > 0 ? 1 : 0);
+        auto& fromTos = gameState.GetFromTos();
         for (int i = 0; i < threadCount - 1; i++) {
-            size_t from = part * i;
-            size_t to = from + std::min(cellRowCount - from, part);
             futures.push_back(std::async(
-                std::launch::async, lam, from, to));
+                std::launch::async, lam, fromTos[i * 2], fromTos[i * 2 + 1]));
         }
 
-        cells.push_back(lam((threadCount - 1) * part, cellRowCount));
+        cells.push_back(lam(fromTos[(threadCount - 1) * 2], fromTos[threadCount * 2 - 1]));
 
         ImGui::SFML::Update(window, deltaClock.restart());
 
-        ImGui::SetNextWindowPos(ImVec2(zonePos.x, zoneHeight + zonePos.y + 5.f), ImGuiCond_Once);
-        ImGui::Begin("State");
+        // ImGui::ShowMetricsWindow();
+
+        ImGui::Begin("Menu");
+
+        // ImGui::BeginTabBar("Menu");
+
+        // if (ImGui::BeginTabItem("Control")) {
         if (ImGui::Button("Start"))
             gameState.Unpause();
         if (ImGui::Button("Pause"))
             gameState.Pause();
         if (ImGui::Button("Restart"))
             gameState.Restart();
+        //     ImGui::EndTabItem();
+        // }
+
+        // if (ImGui::BeginTabItem("Settings")) {
+        //     ImGui::SliderInt("thread count", &threadCount, 1, maxThreadCount);
+        //     ImGui::EndTabItem();
+        // }
+
+        // ImGui::EndTabBar();
+
         ImGui::End();
 
         ImGui::SetNextWindowPos(ImVec2(zonePos.x, zonePos.y), ImGuiCond_Once);
@@ -148,16 +163,15 @@ int main(int argc, char* argv[])
         ImGui::End();
 
         ImGui::Begin("Population");
-        ImGui::Text("Generation: %lld", gameState.GetGeneration());
+        ImGui::Text("Generation: %d", gameState.GetGeneration());
         ImGui::End();
 
         window.clear(bgColor);
 
         window.draw(zone);
 
-        for (auto& f : futures) {
+        for (auto& f : futures)
             cells.push_back(f.get());
-        }
 
         for (const auto& va : cells)
             window.draw(va);

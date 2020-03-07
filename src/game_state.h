@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 
 enum class CellState {
@@ -9,17 +11,8 @@ class GameState {
 public:
     using StateMatrix = std::vector<std::vector<CellState>>;
 
-private:
-    int rowCount_, colCount_;
-    StateMatrix state_, temp_;
-    bool active_ = true;
-    long long generation_ = 0;
-
-    int CountAliveNeighbours(int x, int y) const;
-
-public:
-    GameState(int rowCount, int colCount);
-    GameState(StateMatrix state);
+    GameState(int rowCount, int colCount, int threadCount);
+    GameState(StateMatrix state, int threadCount);
     void NextState();
     void NextStateSeq(int begin, int end);
     const StateMatrix& GetState() const;
@@ -27,5 +20,17 @@ public:
     void Restart();
     void Pause();
     void Unpause();
-    long long GetGeneration() const;
+    int GetGeneration() const;
+    const std::vector<int>& GetFromTos() const;
+
+private:
+    int rowCount_, colCount_;
+    StateMatrix state_, temp_;
+    bool active_ = true;
+    int generation_ = 0;
+    const int threadCount_;
+    std::vector<int> fromTos_;
+
+    int CountAliveNeighbours(int x, int y) const;
+    void SetFromTos();
 };

@@ -5,14 +5,14 @@ conan_basic_setup()
 
 add_executable(prog main.cpp game_state.cpp)
 
-string(
-    APPEND _opts
-    "$<IF:$<CXX_COMPILER_ID:MSVC>,"
-        "/W4;$<$<CONFIG:RELEASE>:/O2>,"
-            "$<$<CONFIG:RELEASE>:-O3>"
-            "$<$<CXX_COMPILER_ID:Clang>:-stdlib=libc++>"
-    ">"
-)
+if(MSVC)
+    add_compile_options("/W4" "$<$<CONFIG:RELEASE>:/O2>")
+else()
+    add_compile_options("-Wall" "-Wextra" "-Werror" "-pedantic" "$<$<CONFIG:RELEASE>:-O3>")
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+        add_compile_options("-stdlib=libc++")
+    endif()
+endif()
 
 target_compile_options(prog PRIVATE "${_opts}")
 
