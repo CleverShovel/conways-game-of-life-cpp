@@ -37,8 +37,8 @@ int main(int argc, char* argv[])
 
     auto bgColor = sf::Color::White;
     auto zoneColor = sf::Color::Black;
-    auto aliveCellColor = sf::Color::Blue;
-    auto deadCellColor = sf::Color::White;
+    auto aliveColor = sf::Color::Blue;
+    auto deadColor = sf::Color::White;
 
     // размер зоны (там происходит сама игра)
     const auto [zoneWidth, zoneHeight] = std::pair{ 600.f, 600.f };
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
     zone.setOutlineColor(zoneColor);
     zone.setPosition(zonePos);
     zone.setOutlineThickness(zoneThickness);
-    zone.setFillColor(deadCellColor);
+    zone.setFillColor(deadColor);
 
     GameState gameState(cellColCount, cellRowCount, threadCount);
 
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
                    cw = cellWidth,
                    ch = cellHeight,
                    zp = zonePos,
-                   acolor = aliveCellColor,
+                   acolor = aliveColor,
                    &gameState](int from, int to) {
         sf::VertexArray cells(sf::Triangles);
 

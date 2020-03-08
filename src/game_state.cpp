@@ -6,8 +6,6 @@
 #include <random>
 #include <utility>
 
-#include <numeric>
-
 using std::array;
 using std::vector;
 
@@ -115,7 +113,8 @@ int GameState::CountAliveNeighbours(int x, int y) const
     for (size_t i = 0; i < dx.size(); i++) {
         int new_x = x + dx[i];
         int new_y = y + dy[i];
-        count += (new_x >= 0 && new_x < colCount_ && new_y >= 0 && new_y < rowCount_
+        count += (std::clamp(new_x, 0, colCount_ - 1) == new_x
+            && std::clamp(new_y, 0, rowCount_ - 1) == new_y
             && state_[new_y][new_x] == CellState::Alive);
     }
 
