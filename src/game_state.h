@@ -9,14 +9,14 @@ enum class CellState {
 
 class GameState {
 public:
-    using StateMatrix = std::vector<std::vector<CellState>>;
+    using StateMatrix = std::vector<CellState>;
 
     GameState(int rowCount, int colCount, int threadCount);
-    GameState(StateMatrix state, int threadCount);
+    GameState(StateMatrix state, int rowCount, int colCount, int threadCount);
     void NextState();
     void NextStateSeq(int begin, int end);
     const StateMatrix& GetState() const;
-    void SetState(StateMatrix state);
+    void SetState(StateMatrix state, int rowCount, int colCount);
     void Restart();
     void Pause();
     void Unpause();

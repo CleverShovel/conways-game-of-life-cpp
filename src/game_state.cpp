@@ -15,11 +15,10 @@ GameState::StateMatrix GenerateMatrix(int rowCount, int colCount)
     std::default_random_engine e(r());
     std::uniform_int_distribution<int> uniform_dist(0, 1);
 
-    auto matrix = GameState::StateMatrix(rowCount, vector(colCount, CellState::Dead));
-    for (auto& v : matrix)
-        std::generate(v.begin(), v.end(), [&]() {
-            return static_cast<CellState>(uniform_dist(e));
-        });
+    auto matrix = GameState::StateMatrix(rowCount*colCount, CellState::Dead);
+    std::generate(matrix.begin(), matrix.end(), [&]() {
+        return static_cast<CellState>(uniform_dist(e));
+    });
     return matrix;
 }
 
@@ -34,9 +33,9 @@ GameState::GameState(int rowCount, int colCount, int threadCount)
     SetFromTos();
 }
 
-GameState::GameState(StateMatrix state, int threadCount)
-    : rowCount_(state.size())
-    , colCount_(state.size() > 0 ? state[0].size() : 0)
+GameState::GameState(StateMatrix state, int rowCount, int colCount, int threadCount)
+    : rowCount_(rowCount)
+    , colCount_(colCount)
     , state_(std::move(state))
     , temp_(state_)
     , threadCount_(threadCount_)
@@ -50,8 +49,8 @@ void GameState::NextStateSeq(int from, int to)
     for (int i = from; i < to; i++) {
         for (int j = 0; j < colCount_; j++) {
             int count = CountAliveNeighbours(j, i);
-            temp_[i][j] = static_cast<CellState>(
-                count == 3 || count == 2 && state_[i][j] == CellState::Alive);
+            temp_[i*colCount_ + j] = static_cast<CellState>(
+                count == 3 || count == 2 && state_[i*colCount_ + j] == CellState::Alive);
         }
     }
 }
@@ -76,13 +75,14 @@ void GameState::NextState()
 
 const GameState::StateMatrix& GameState::GetState() const { return state_; }
 
-void GameState::SetState(GameState::StateMatrix state)
+void GameState::SetState(GameState::StateMatrix state, int rowCount, int colCount)
 {
     state_.swap(state);
-    rowCount_ = state_.size();
-    colCount_ = (state_.empty() ? 0 : state_[0].size());
+    rowCount_ = rowCount;
+    colCount_ = colCount;
     generation_ = 0;
-    temp_ = state_;
+    temp_.resize(state_.size());
+    temp_.shrink_to_fit();
     SetFromTos();
 }
 
@@ -105,8 +105,8 @@ const std::vector<int>& GameState::GetFromTos() const
 
 int GameState::CountAliveNeighbours(int x, int y) const
 {
-    const static auto dx = array{ -1, 0, 1, 1, 1, 0, -1, -1 };
-    const static auto dy = array{ -1, -1, -1, 0, 1, 1, 1, 0 };
+    constexpr static auto dx = array{ -1, 0, 1, 1, 1, 0, -1, -1 };
+    constexpr static auto dy = array{ -1, -1, -1, 0, 1, 1, 1, 0 };
 
     int count = 0;
 
@@ -115,7 +115,7 @@ int GameState::CountAliveNeighbours(int x, int y) const
         int new_y = y + dy[i];
         count += (std::clamp(new_x, 0, colCount_ - 1) == new_x
             && std::clamp(new_y, 0, rowCount_ - 1) == new_y
-            && state_[new_y][new_x] == CellState::Alive);
+            && bool(state_[new_y*colCount_ + new_x]));
     }
 
     return count;

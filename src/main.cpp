@@ -1,3 +1,4 @@
+#include "custom_iterators.h"
 #include "game_state.h"
 
 #include <imgui-SFML.h>
@@ -8,18 +9,35 @@
 #include <SFML/System/Clock.hpp>
 #include <SFML/Window/Event.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <future>
 #include <utility>
 #include <vector>
 
-// #include <iostream>
+#include <execution>
+#include <iterator>
+
+#include <range/v3/range/access.hpp>
+#include <range/v3/range/conversion.hpp>
+#include <range/v3/view/cartesian_product.hpp>
+#include <range/v3/view/filter.hpp>
+#include <range/v3/view/for_each.hpp>
+#include <range/v3/view/iota.hpp>
+#include <range/v3/view/transform.hpp>
+
+#include <iostream>
+
+using namespace ranges;
 
 using sf::Vector2f;
 using sf::Vertex;
 using std::array;
+using std::get;
 using std::vector;
+
+// TODO сделать реализацию vector для vertex
 
 int main(int argc, char* argv[])
 {
@@ -57,6 +75,15 @@ int main(int argc, char* argv[])
         zoneWidth / cellColCount, zoneHeight / cellRowCount
     };
 
+    const static auto vector2fs = array{
+        sf::Vector2f(zonePos.x, zonePos.y),
+        sf::Vector2f(zonePos.x, zonePos.y + cellHeight),
+        sf::Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
+        sf::Vector2f(zonePos.x, zonePos.y + cellHeight),
+        sf::Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
+        sf::Vector2f(zonePos.x + cellWidth, zonePos.y)
+    };
+
     sf::RectangleShape zone(sf::Vector2f(zoneWidth, zoneHeight));
     zone.setOutlineColor(zoneColor);
     zone.setPosition(zonePos);
@@ -65,33 +92,28 @@ int main(int argc, char* argv[])
 
     GameState gameState(cellColCount, cellRowCount, threadCount);
 
-    auto lam = [cc = cellColCount,
-                   cr = cellRowCount,
-                   cw = cellWidth,
-                   ch = cellHeight,
-                   zp = zonePos,
-                   acolor = aliveColor,
-                   &gameState](int from, int to) {
-        sf::VertexArray cells(sf::Triangles);
+    // auto lam = [cc = cellColCount,
+    //                cw = cellWidth,
+    //                ch = cellHeight,
+    //                zp = zonePos,
+    //                acolor = aliveColor](const auto& cells_line) {
+    //     sf::VertexArray cells(sf::Triangles);
 
-        auto& state = gameState.GetState();
-        for (int i = from; i < to; i++) {
-            for (int j = 0; j < cc; j++) {
-                if (state[i][j] == CellState::Dead)
-                    continue;
-                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y), acolor));
-                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
-                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
-                cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
-                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
-                cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y), acolor));
-            }
-        }
-        return cells;
-    };
+    //     auto& state = gameState.GetState();
+    //         for (int j = 0; j < cc; j++) {
+    //             if (state[i][j] == CellState::Dead)
+    //                 continue;
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y), acolor));
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
+    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y), acolor));
+    //         }
+    //     return cells;
+    // };
 
-    vector<std::future<sf::VertexArray>> futures;
-    vector<sf::VertexArray> cells;
+    // vector<std::future<sf::VertexArray>> futures;
 
     window.setTitle(windowTitle);
 
@@ -121,13 +143,54 @@ int main(int argc, char* argv[])
 
         gameState.NextState();
 
-        auto& fromTos = gameState.GetFromTos();
-        for (int i = 0; i < threadCount - 1; i++) {
-            futures.push_back(std::async(
-                std::launch::async, lam, fromTos[i * 2], fromTos[i * 2 + 1]));
-        }
+        auto& state = gameState.GetState();
 
-        cells.push_back(lam(fromTos[(threadCount - 1) * 2], fromTos[threadCount * 2 - 1]));
+        auto triangle_idxs = views::cartesian_product(views::cartesian_product(
+                                                          views::ints(0, cellColCount),
+                                                          views::ints(0, cellRowCount))
+                                     | views::filter(
+                                           [&](auto tpl) { return bool(state[get<1>(tpl) * cellColCount + get<0>(tpl)]); }),
+                                 views::ints(0, 6))
+            | to<vector>();
+
+        // auto triangle_idxs = views::cartesian_product(
+        //                          views::ints(0, cellColCount),
+        //                          views::ints(0, cellRowCount),
+        //                          views::ints(0, 6))
+        //     | views::filter(
+        //           [&](auto tpl) { return bool(state[get<1>(tpl) * cellColCount + get<0>(tpl)]); })
+        //     | to<vector>();
+
+        // auto cells
+        //     = views::for_each(views::ints(0, cellRowCount * cellColCount)
+        //               | views::filter([&](int pos) { return bool(state[pos]); }),
+        //           [](int pos) {
+        //               return yield_from(
+        //                   views::ints(0, 6)
+        //                   | views::transform([=](int add) { return (pos << 3) + add; }));
+        //           })
+        //     | to<vector>();
+
+        vector<Vertex> triangles(triangle_idxs.size());
+        std::transform(std::execution::par_unseq, begin(triangle_idxs), end(triangle_idxs), triangles.begin(), [&](const auto& idx) -> Vertex {
+            return { Vector2f(
+                         get<0>(get<0>(idx)) * cellWidth,
+                         get<1>(get<0>(idx)) * cellHeight)
+                    + vector2fs[get<1>(idx)],
+                aliveColor };
+        });
+
+        // auto cells = ints(0, cellRowCount * cellColCount * 6)
+        //     | filter([&](int pos) { return state[pos / 6] == CellState::Alive; })
+        //     | transform([&](int pos) -> Vertex {
+        //           return { Vector2f(
+        //                        ((pos / 6) / cellColCount) * cellWidth,
+        //                        ((pos / 6) % cellColCount) * cellHeight)
+        //                   + vector2fs[pos % 6],
+        //               aliveColor };
+        //       })
+        //     | ranges::to<vector>();
+        // std::transform(std::execution::par_unseq, state.begin(), state.end(), lam);
 
         ImGui::SFML::Update(window, deltaClock.restart());
 
@@ -163,24 +226,22 @@ int main(int argc, char* argv[])
         ImGui::End();
 
         ImGui::Begin("Population");
-        ImGui::Text("Generation: %d", gameState.GetGeneration());
+        ImGui::Text("generation: %d", gameState.GetGeneration());
         ImGui::End();
 
         window.clear(bgColor);
 
         window.draw(zone);
 
-        for (auto& f : futures)
-            cells.push_back(f.get());
-
-        for (const auto& va : cells)
-            window.draw(va);
+        window.draw(triangles.data(), triangles.size(), sf::Triangles);
+        // for (const auto& va : cells)
+        //     window.draw(va);
 
         ImGui::SFML::Render(window);
         window.display();
 
-        futures.clear();
-        cells.clear();
+        // futures.clear();
+        // cells.clear();
     }
 
     ImGui::SFML::Shutdown();
