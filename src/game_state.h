@@ -1,6 +1,9 @@
 #pragma once
 
+#include <taskflow/taskflow.hpp>
+
 #include <vector>
+#include <utility>
 
 enum class CellState {
     Dead,
@@ -11,8 +14,8 @@ class GameState {
 public:
     using StateMatrix = std::vector<CellState>;
 
-    GameState(int rowCount, int colCount, int threadCount);
-    GameState(StateMatrix state, int rowCount, int colCount, int threadCount);
+    GameState(int rowCount, int colCount);
+    GameState(StateMatrix state, int rowCount, int colCount);
     void NextState();
     void NextStateSeq(int begin, int end);
     const StateMatrix& GetState() const;
@@ -21,15 +24,18 @@ public:
     void Pause();
     void Unpause();
     int GetGeneration() const;
-    const std::vector<int>& GetFromTos() const;
+    const std::vector<std::pair<int, int>>& GetFromTos() const;
 
 private:
     int rowCount_, colCount_;
     StateMatrix state_, temp_;
     bool active_ = true;
     int generation_ = 0;
-    const int threadCount_;
-    std::vector<int> fromTos_;
+
+    tf::Executor exec_;
+
+    constexpr static int taskSize = 60000;
+    std::vector<std::pair<int, int>> fromTos_;
 
     int CountAliveNeighbours(int x, int y) const;
     void SetFromTos();

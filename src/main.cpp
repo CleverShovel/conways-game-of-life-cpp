@@ -1,4 +1,3 @@
-#include "custom_iterators.h"
 #include "game_state.h"
 
 #include <imgui-SFML.h>
@@ -6,6 +5,7 @@
 
 #include <SFML/Graphics/RectangleShape.hpp>
 #include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/Vertex.hpp>
 #include <SFML/System/Clock.hpp>
 #include <SFML/Window/Event.hpp>
 
@@ -13,31 +13,56 @@
 #include <array>
 #include <cmath>
 #include <future>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <execution>
-#include <iterator>
+// #include <iostream>
 
-#include <range/v3/range/access.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/cartesian_product.hpp>
-#include <range/v3/view/filter.hpp>
-#include <range/v3/view/for_each.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/transform.hpp>
-
-#include <iostream>
-
-using namespace ranges;
+using namespace std;
 
 using sf::Vector2f;
 using sf::Vertex;
-using std::array;
-using std::get;
-using std::vector;
 
-// TODO сделать реализацию vector для vertex
+// TODO написать класс содержащий указатель на N (шаблонный параметр) подряд идущих объектов для удобного разделения с помощью std::partition
+// TODO bidirectional итераторы?
+
+struct QuadHelper {
+public:
+    QuadHelper(size_t cellPos, sf::Vertex* first)
+        : cellPos_(cellPos)
+        , first_(first)
+    {
+    }
+
+    void swap(QuadHelper& other)
+    {
+        auto tempPos = cellPos_;
+        cellPos_ = other.cellPos_;
+        other.cellPos_ = tempPos;
+        for (size_t i = 0; i < QuadSize; i++) {
+            auto temp = first_[i];
+            first_[i] = other.first_[i];
+            other.first_[i] = temp;
+        }
+    }
+
+    size_t Pos() const
+    {
+        return cellPos_;
+    }
+
+    static const size_t QuadSize = 6;
+
+private:
+    size_t cellPos_;
+    sf::Vertex* first_;
+};
+
+void swap(QuadHelper& q1, QuadHelper& q2)
+{
+    q1.swap(q2);
+}
 
 int main(int argc, char* argv[])
 {
@@ -59,29 +84,29 @@ int main(int argc, char* argv[])
     auto deadColor = sf::Color::White;
 
     // размер зоны (там происходит сама игра)
-    const auto [zoneWidth, zoneHeight] = std::pair{ 600.f, 600.f };
+    const auto [zoneWidth, zoneHeight] = std::pair { 600.f, 600.f };
 
     // отступ от края окна
-    const auto zonePos = sf::Vector2f{ 5.f, 5.f };
+    const auto zonePos = sf::Vector2f { 5.f, 5.f };
 
     // толщина линии зоны
     const float zoneThickness = 2.f;
 
     // количество столбцов и строк соответственно
-    const auto [cellColCount, cellRowCount] = std::pair{ 600, 600 };
+    const auto [cellColCount, cellRowCount] = std::pair { 600, 600 };
 
     // размеры клеток (не трогать)
-    const auto [cellWidth, cellHeight] = std::pair{
+    const auto [cellWidth, cellHeight] = std::pair {
         zoneWidth / cellColCount, zoneHeight / cellRowCount
     };
 
-    const static auto vector2fs = array{
-        sf::Vector2f(zonePos.x, zonePos.y),
-        sf::Vector2f(zonePos.x, zonePos.y + cellHeight),
-        sf::Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
-        sf::Vector2f(zonePos.x, zonePos.y + cellHeight),
-        sf::Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
-        sf::Vector2f(zonePos.x + cellWidth, zonePos.y)
+    const static auto vector2fs = array {
+        Vector2f(zonePos.x, zonePos.y),
+        Vector2f(zonePos.x, zonePos.y + cellHeight),
+        Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
+        Vector2f(zonePos.x, zonePos.y + cellHeight),
+        Vector2f(zonePos.x + cellWidth, zonePos.y + cellHeight),
+        Vector2f(zonePos.x + cellWidth, zonePos.y)
     };
 
     sf::RectangleShape zone(sf::Vector2f(zoneWidth, zoneHeight));
@@ -90,30 +115,24 @@ int main(int argc, char* argv[])
     zone.setOutlineThickness(zoneThickness);
     zone.setFillColor(deadColor);
 
-    GameState gameState(cellColCount, cellRowCount, threadCount);
+    GameState gameState(cellColCount, cellRowCount);
 
-    // auto lam = [cc = cellColCount,
-    //                cw = cellWidth,
-    //                ch = cellHeight,
-    //                zp = zonePos,
-    //                acolor = aliveColor](const auto& cells_line) {
-    //     sf::VertexArray cells(sf::Triangles);
+    vector<Vertex> triangle_idxs;
+    triangle_idxs.reserve(cellRowCount * cellColCount * 6);
+    for (size_t i = 0; i < cellRowCount; i++) {
+        for (size_t j = 0; j < cellColCount; j++)
+            for (size_t k = 0; k < 6; k++)
+                triangle_idxs.emplace_back(Vector2f(
+                                               j * cellWidth,
+                                               i * cellHeight)
+                        + vector2fs[k],
+                    aliveColor);
+    }
 
-    //     auto& state = gameState.GetState();
-    //         for (int j = 0; j < cc; j++) {
-    //             if (state[i][j] == CellState::Dead)
-    //                 continue;
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y), acolor));
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x, i * ch + zp.y + ch), acolor));
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y + ch), acolor));
-    //             cells.append(Vertex(Vector2f(j * cw + zp.x + cw, i * ch + zp.y), acolor));
-    //         }
-    //     return cells;
-    // };
-
-    // vector<std::future<sf::VertexArray>> futures;
+    vector<QuadHelper> quads;
+    quads.reserve(cellColCount * cellRowCount);
+    for (size_t i = 0; i < cellColCount * cellRowCount; i++)
+        quads.emplace_back(i, triangle_idxs.data() + i * QuadHelper::QuadSize);
 
     window.setTitle(windowTitle);
 
@@ -145,52 +164,10 @@ int main(int argc, char* argv[])
 
         auto& state = gameState.GetState();
 
-        auto triangle_idxs = views::cartesian_product(views::cartesian_product(
-                                                          views::ints(0, cellColCount),
-                                                          views::ints(0, cellRowCount))
-                                     | views::filter(
-                                           [&](auto tpl) { return bool(state[get<1>(tpl) * cellColCount + get<0>(tpl)]); }),
-                                 views::ints(0, 6))
-            | to<vector>();
-
-        // auto triangle_idxs = views::cartesian_product(
-        //                          views::ints(0, cellColCount),
-        //                          views::ints(0, cellRowCount),
-        //                          views::ints(0, 6))
-        //     | views::filter(
-        //           [&](auto tpl) { return bool(state[get<1>(tpl) * cellColCount + get<0>(tpl)]); })
-        //     | to<vector>();
-
-        // auto cells
-        //     = views::for_each(views::ints(0, cellRowCount * cellColCount)
-        //               | views::filter([&](int pos) { return bool(state[pos]); }),
-        //           [](int pos) {
-        //               return yield_from(
-        //                   views::ints(0, 6)
-        //                   | views::transform([=](int add) { return (pos << 3) + add; }));
-        //           })
-        //     | to<vector>();
-
-        vector<Vertex> triangles(triangle_idxs.size());
-        std::transform(std::execution::par_unseq, begin(triangle_idxs), end(triangle_idxs), triangles.begin(), [&](const auto& idx) -> Vertex {
-            return { Vector2f(
-                         get<0>(get<0>(idx)) * cellWidth,
-                         get<1>(get<0>(idx)) * cellHeight)
-                    + vector2fs[get<1>(idx)],
-                aliveColor };
-        });
-
-        // auto cells = ints(0, cellRowCount * cellColCount * 6)
-        //     | filter([&](int pos) { return state[pos / 6] == CellState::Alive; })
-        //     | transform([&](int pos) -> Vertex {
-        //           return { Vector2f(
-        //                        ((pos / 6) / cellColCount) * cellWidth,
-        //                        ((pos / 6) % cellColCount) * cellHeight)
-        //                   + vector2fs[pos % 6],
-        //               aliveColor };
-        //       })
-        //     | ranges::to<vector>();
-        // std::transform(std::execution::par_unseq, state.begin(), state.end(), lam);
+        auto partition_size = (partition(quads.begin(), quads.end(),
+                                   [&](const auto& quad) { return bool(state[quad.Pos()]); })
+                                  - quads.begin())
+            * 6;
 
         ImGui::SFML::Update(window, deltaClock.restart());
 
@@ -233,9 +210,7 @@ int main(int argc, char* argv[])
 
         window.draw(zone);
 
-        window.draw(triangles.data(), triangles.size(), sf::Triangles);
-        // for (const auto& va : cells)
-        //     window.draw(va);
+        window.draw(triangle_idxs.data(), partition_size, sf::Triangles);
 
         ImGui::SFML::Render(window);
         window.display();
